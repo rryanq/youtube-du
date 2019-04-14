@@ -7,6 +7,7 @@ import pprint
 import httplib2
 import os
 import sys
+import click
 
 from googleapiclient.discovery import build
 from apiclient.errors import HttpError
@@ -22,13 +23,6 @@ CLIENT_SECRETS_FILE = "client_secrets_v2.json"
 YOUTUBE_READ_WRITE_SCOPE = "https://www.googleapis.com/auth/youtube"
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
-
-# This is the string that will be appended to the end of all specified YouTube video descriptions
-####################################
-APPEND_STRING = """
-\nTHIS IS A TEST
-"""
-####################################
 
 # This variable defines a message to display if the CLIENT_SECRETS_FILE is
 # missing.
@@ -49,18 +43,25 @@ https://developers.google.com/api-client-library/python/guide/aaa_client_secrets
                                    CLIENT_SECRETS_FILE))
 
 
-def main():
-    with open('video_ids.txt') as file:
-        videos = json.load(file)
+@click.command()
+@click.option('--video_ids', required=True, type=str, help="File containing the list of video IDs of all YouTube videos to operate on.")
+@click.option('--find', required=True, type=str, help="File containing the string that you would like to find in your YouTube descriptions.")
+@click.option('--replace_with', required=True, type=str, help="File containing the string that you would like to replace the find string with.")
+def main(video_ids, find, replace_with):
 
-    # For testing, set videos to a list of two videos of mine that are very old and have less than 1000 views each
-    videos = ['LHfYzVy-TKo', 'bb80xTDkDcA']
+    # extract list of video IDs from provided file
+    with open(video_ids) as file:
+        video_ids = json.load(file)
 
     # Initialize argparser arguments
+    argparser.add_argument("--video_ids", default=video_ids)
     argparser.add_argument("--video-id", help="ID of video to update.", default="")
-    argparser.add_argument("--tag", default="test_tag", help="Additional tag to add to video.")
-    for video in videos:
-        argparser.set_defaults(video_id=video)
+    argparser.add_argument("--find", default=find)
+    argparser.add_argument("--replace_with", default=replace_with)
+
+    # Update each video specified in the video_ids list
+    for video_id in video_ids:
+        argparser.set_defaults(video_id=video_id)
         args = argparser.parse_args()
         youtube = get_authenticated_service(args)
         try:
@@ -86,44 +87,45 @@ def get_authenticated_service(args):
                  http=credentials.authorize(httplib2.Http()))
 
 def update_video(youtube, options):
-  # Call the API's videos.list method to retrieve the video resource.
-  # print("video_id: ", options.video_id)
-  videos_list_response = youtube.videos().list(
-    id=options.video_id,
-    part='snippet'
-  ).execute()
+    # Call the API's videos.list method to retrieve the video resource.
+    videos_list_response = youtube.videos().list(
+        id=options.video_id,
+        part='snippet'
+    ).execute()
 
-  # If the response does not contain an array of "items" then the video was
-  # not found.
-  if not videos_list_response["items"]:
-    print("Video '{}' was not found.".format(options.video_id))
-    # sys.exit(1)
+    # If the response does not contain an array of "items" then the video was
+    # not found.
+    if not videos_list_response["items"]:
+        print("Video '{}' was not found.".format(options.video_id))
+        # sys.exit(1)
 
-  # Since the request specified a video ID, the response only contains one
-  # video resource. This code extracts the snippet from that resource.
-  videos_list_snippet = videos_list_response["items"][0]["snippet"]
+    # Since the request specified a video ID, the response only contains one
+    # video resource. This code extracts the snippet from that resource.
+    videos_list_snippet = videos_list_response["items"][0]["snippet"]
 
-  # Preserve the descriptions already associated with the video. If the video does
-  # not have a description, create a new one. Append the provided string to the
-  # description associated with the video.
-  if "description" not in videos_list_snippet:
-      videos_list_snippet["description"] = ""
-  videos_list_snippet["description"] += APPEND_STRING
+    with open(options.find) as file:
+        find_string = file.read()
+    with open(options.replace_with) as file:
+        replace_with_string = file.read()
+    # get rid of newline at end of file
+    find_string = find_string[0:-1]
+    replace_with_string = replace_with_string[0:-1]
 
-  # Preserve any tags already associated with the video. If the video does
-  # not have any tags, create a new array. Append the provided tag to the
-  # list of tags associated with the video.
-  if "tags" not in videos_list_snippet:
-    videos_list_snippet["tags"] = []
-  videos_list_snippet["tags"].append(options.tag)
+    # Preserve the descriptions already associated with the video. If the video does
+    # not have a description, create a new one. Update the description
+    if "description" not in videos_list_snippet:
+        videos_list_snippet["description"] = ""
+    original_description = videos_list_snippet["description"]
+    new_description = original_description.replace(find_string, replace_with_string)
+    videos_list_snippet["description"] = new_description
 
-  # Update the video resource by calling the videos.update() method.
-  videos_update_response = youtube.videos().update(
-    part='snippet',
-    body=dict(
-      snippet=videos_list_snippet,
-      id=options.video_id
-    )).execute()
+    # Update the video resource by calling the videos.update() method.
+    videos_update_response = youtube.videos().update(
+        part='snippet',
+        body=dict(
+            snippet=videos_list_snippet,
+            id=options.video_id
+        )).execute()
 
 
 if __name__ == "__main__":

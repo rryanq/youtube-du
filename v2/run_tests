@@ -1,0 +1,21 @@
+echo "Starting test"
+
+# Append the string 'TEST' to two video descriptions
+echo "Appending string 'TEST' to video descriptions"
+# TODO
+
+# Assert that the string 'TEST' has been added to the end of each video description
+# TODO
+
+# Replace the string 'TEST' with the string 'GREAT TEST' in each video description
+echo "Replacing string 'TEST' with string 'GREAT TEST' in video descriptions"
+python3 update_description_v2.py --video_ids test_inputs/video_ids_1.txt --find test_inputs/find_string_1.txt  --replace_with test_inputs/replace_with_string_1.txt
+
+# Assert that the string 'TEST' has been replaced with the string 'GREAT TEST' in each video description
+# TODO
+
+# Remove the string 'GREAT TEST' from each video description
+echo "Removing added strings from video descriptions"
+# TODO
+
+echo "Done"
