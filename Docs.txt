@@ -14,8 +14,19 @@ In order to run the program:
   2. the credentials specified in client_secrets_v2.json MUST be up to date. You can obtain new ones here if the first run returns 403 Forbidden: https://console.developers.google.com/apis/credentials?project=meta-scanner-228205&folder&organizationId
     - If new credentials are obtained, replace old ones in client_secrets_v2.json
   3. You must be in a correct virtual environment
-  4. Type `python3 update_description_v2.py --find <file containing string to find> --replace_with <file containing string to replace find string with> --video_ids <file containing list object of video_ids to operate on>`
-  5. If the program authenticates successfully but it has been a while since it was run, the command line may display a link that needs to be copied and pasted into the browser to finish authentication. This link leads to a consent page that I had to set up. It is like an official app where you have to give the app permission to make changes to your YouTube channel. (see consent_screen.png) Once you say yes, then the program will run.
+  4. Type:
+        python3 update_description_v2.py
+          --find [REQUIRED] <file containing string to find>
+          --replace_with [REQUIRED] <file containing string to replace find string with>
+          --video_ids [OPTIONAL] <file containing list object of video_ids to operate on>
+      - If no parameter for video_ids is provided, default is to run find and replace on ALL videos
+  5. If you do not plan to provide a list of video ids to operate on and would instead like to operate on all video ids for a given channel,
+     then you must also provide an `api_credentials.json` file that contains the following:
+       {
+         "API_KEY": <a valid youtube API key which can be obtained here: https://console.developers.google.com/apis/credentials?project=meta-scanner-228205>
+         "CHANNEL_ID": <the channel ID of the channel that you are operating on. For example, the channel ID for Quin's Coins is: 'UC0Il3poeADV0QEio9GWPEHw'>
+       }
+  6. If the program authenticates successfully but it has been a while since it was run, the command line may display a link that needs to be copied and pasted into the browser to finish authentication. This link leads to a consent page that I had to set up. It is like an official app where you have to give the app permission to make changes to your YouTube channel. (see consent_screen.png) Once you say yes, then the program will run.
 
 Here is the pip list from the virtual environment that I am currently using:
 
