@@ -56,43 +56,72 @@ class StringNotFoundError(Error):
 
 @click.command()
 @click.option('--video_ids', required=False, type=str, help="File containing the list of video IDs of all YouTube videos to operate on.")
-@click.option('--find', required=True, type=str, help="File containing the string that you would like to find in your YouTube descriptions.")
-@click.option('--replace_with', required=True, type=str, help="File containing the string that you would like to replace the find string with.")
-def main(video_ids, find, replace_with):
+@click.option('--all', is_flag=True, default=False, help="Use this option to perform operations on all YouTube video descriptions")
+@click.option('--find', required=False, type=str, help="File containing the string that you would like to find in your YouTube descriptions.")
+@click.option('--replace_with', required=False, type=str, help="File containing the string that you would like to replace the find string with.")
+@click.option('--append', required=False, type=str, help="File containing the string that you would like to append to the end of YouTube descriptions.")
+def main(video_ids, find, replace_with, append, all):
 
     # Initialize argparser arguments
+    argparser.add_argument("--all", action='store_const', const=all)
     argparser.add_argument("--video_ids", default=video_ids)
-    argparser.add_argument("--video_id", help="ID of video to update.", default="")
     argparser.add_argument("--find", default=find)
     argparser.add_argument("--replace_with", default=replace_with)
-
+    argparser.add_argument("--append", default=append)
+    argparser.add_argument("--video_id", help="ID of video to update.", default="")
+    # Assign video_ids argument
     # If video_ids file provided, extract list of video IDs from provided file
-    if video_ids:
+    if video_ids and not all:
         with open(video_ids) as file:
             video_ids = json.load(file)
-    # Otherwise, default is to find and replace on all videos
+    # If 'all' option supplied, find and replace on all videos
     # Get list of all video ids using an API key
-    else:
+    elif all and not video_ids:
         with open(API_CREDENTIALS_FILE) as file:
             data = json.load(file)
             api_key = data["API_KEY"]
             channel_id = data["CHANNEL_ID"]
         video_ids = get_video_ids(api_key, channel_id)
+    # otherwise, there is an error.
+    else:
+        print("Error: must supply either 'video_ids' option or provide '--all' flag")
+        exit(1)
 
-    # Update each video specified in the video_ids list
-    for video_id in video_ids:
-        argparser.set_defaults(video_id=video_id)
-        args = argparser.parse_args()
-        youtube = get_authenticated_service(args)
-        try:
-            update_video(youtube, args)
-        except HttpError as e:
-            print("An HTTP error {} occurred:\n{}".format(e.resp.status, e.content))
-        except StringNotFoundError as e:
-            info = e.args[0]
-            print(info["message"])
-        else:
-            print("Description updated on video with video ID: '{}'.".format(args.video_id))
+    # Determine operation to perform
+    if find and replace_with and not append:
+        # perform a find and replace
+        for video_id in video_ids:
+            argparser.set_defaults(video_id=video_id)
+            args = argparser.parse_args()
+            youtube = get_authenticated_service(args)
+            try:
+                find_and_replace_single_video(youtube, args)
+            except HttpError as e:
+                print("An HTTP error {} occurred:\n{}".format(e.resp.status, e.content))
+            except StringNotFoundError as e:
+                info = e.args[0]
+                print(info["message"])
+            else:
+                print("Description updated on video with video ID: '{}'.".format(args.video_id))
+    elif append and not find and not replace_with:
+        # perform append
+        for video_id in video_ids:
+            argparser.set_defaults(video_id=video_id)
+            args = argparser.parse_args()
+            youtube = get_authenticated_service(args)
+            try:
+                append_single_video(youtube, args)
+            except HttpError as e:
+                print("An HTTP error {} occurred:\n{}".format(e.resp.status, e.content))
+            except StringNotFoundError as e:
+                info = e.args[0]
+                print(info["message"])
+            else:
+                print("Description updated on video with video ID: '{}'.".format(args.video_id))
+    else:
+        # invalid command line argument combination
+        print("Error: Usage. Please use '--help' flag for more information")
+        exit(1)
 
 
 def get_authenticated_service(args):
@@ -135,7 +164,9 @@ def get_video_ids(key, channelId):
     videoIDs = [videoID[0] for videoID in videoIDs]
     return videoIDs
 
-def update_video(youtube, options):
+
+def find_and_replace_single_video(youtube, options):
+    """Perform find and replace on the description of a single YouTube video."""
     # Call the API's videos.list method to retrieve the video resource.
     videos_list_response = youtube.videos().list(
         id=options.video_id,
@@ -158,7 +189,13 @@ def update_video(youtube, options):
 
     # remove trailing whitespace
     find_string = find_string.rstrip()
+    if len(find_string) < 4:
+        print("Error: find string too short. A short find string could result in unintended consequences!")
+        exit(1)
     replace_with_string = replace_with_string.rstrip()
+    if len(replace_with_string) < 4:
+        print("Error: replace_with string too short. A short replace_with string could result in unintended consequences!")
+        exit(1)
 
     # Preserve the descriptions already associated with the video. If the video does
     # not have a description, create a new one. Update the description
@@ -170,6 +207,46 @@ def update_video(youtube, options):
         new_description = original_description.replace(find_string, replace_with_string)
     else:
         raise StringNotFoundError({"message": "replace string not found in description of video with ID: '{}'".format(options.video_id)})
+    videos_list_snippet["description"] = new_description
+
+    # Update the video resource by calling the videos.update() method.
+    videos_update_response = youtube.videos().update(
+        part='snippet',
+        body=dict(
+            snippet=videos_list_snippet,
+            id=options.video_id
+        )).execute()
+
+
+def append_single_video(youtube, options):
+    """Perform append operation on the description of a single YouTube video."""
+    # Call the API's videos.list method to retrieve the video resource.
+    videos_list_response = youtube.videos().list(
+        id=options.video_id,
+        part='snippet'
+    ).execute()
+
+    # If the response does not contain an array of "items" then the video was
+    # not found.
+    if not videos_list_response["items"]:
+        print("Video '{}' was not found.".format(options.video_id))
+
+    # Since the request specified a video ID, the response only contains one
+    # video resource. This code extracts the snippet from that resource.
+    videos_list_snippet = videos_list_response["items"][0]["snippet"]
+
+    with open(options.append) as file:
+        append_string = file.read()
+
+    # remove trailing whitespace
+    append_string = append_string.rstrip()
+
+    # Preserve the descriptions already associated with the video. If the video does
+    # not have a description, create a new one. Update the description
+    if "description" not in videos_list_snippet:
+        videos_list_snippet["description"] = ""
+    original_description = videos_list_snippet["description"]
+    new_description = original_description + append_string
     videos_list_snippet["description"] = new_description
 
     # Update the video resource by calling the videos.update() method.
