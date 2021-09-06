@@ -153,6 +153,7 @@ def get_video_ids(key, channelId):
         else:
             moreResults = False
             pageToken = ''
+        # raise Exception(data)
         data = data['items']
         for video in data:
             if 'videoId' in video['id'] and 'publishedAt' in video['snippet']:
