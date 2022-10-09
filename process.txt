@@ -1,0 +1,12 @@
+This is the process that should be followed to use this program to update a description.
+
+1. Create two input files: one containing the old string and one containing the new string
+2. Run the program. A sample run looks like this:
+```
+source ./env/bin/activate
+cd v2
+python3 update_description_v2.py --find ./inputs/old_address_4.txt --replace_with ./inputs/new_address.txt --all
+```
+3. Once finished, manually fix any descriptions that were missed for any reason. Note that the description of YouTube Shorts videos may be different than those of regular longform videos.
+4. Update the YouTube video default description here: https://studio.youtube.com/channel/UC0Il3poeADV0QEio9GWPEHw
+    - from here, go to Settings > Upload Defaults

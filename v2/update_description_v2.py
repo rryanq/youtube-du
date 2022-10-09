@@ -159,6 +159,8 @@ def get_video_ids(key, channelId):
             if 'videoId' in video['id'] and 'publishedAt' in video['snippet']:
                 videoId = (video['id']['videoId'], video['snippet']['publishedAt'])
                 videoIDs.append(videoId)
+    # remove duplicates
+    videoIDs = [*set(videoIDs)]
     # sort videoIDs in reverse chronological order based on date published
     videoIDs.sort(key=lambda x: x[1], reverse=True)
     # remove publish date from list and return
