@@ -1,8 +1,10 @@
 # Update the video description on several YouTube videos
 
+import re
 import requests
 import json
 import pprint
+from datetime import datetime
 
 import httplib2
 import os
@@ -45,14 +47,23 @@ https://developers.google.com/api-client-library/python/guide/aaa_client_secrets
 """ % os.path.abspath(os.path.join(os.path.dirname(__file__),
                                    CLIENT_SECRETS_FILE))
 
+
 # define Python user-defined exceptions
 class Error(Exception):
    """Base class for other exceptions."""
-   pass
+
 
 class StringNotFoundError(Error):
    """Raised when the string is not found."""
-   pass
+
+
+class IsYouTubeShortError(Exception):
+    """Exception class for YouTube Shorts."""
+
+
+class VideoTooOldError(Exception):
+    """Exception class for YouTube videos that are too old."""
+
 
 @click.command()
 @click.option('--video_ids', required=False, type=str, help="File containing the list of video IDs of all YouTube videos to operate on.")
@@ -101,6 +112,10 @@ def main(video_ids, find, replace_with, append, all):
             except StringNotFoundError as e:
                 info = e.args[0]
                 print(info["message"])
+            except IsYouTubeShortError as e:
+                print(f"Video '{args.video_id}' appears to be a YouTube Short, skipping...")
+            except VideoTooOldError as e:
+                print(f"Video '{args.video_id}' is too old and does not use the modern description format, skipping...")
             else:
                 print("Description updated on video with video ID: '{}'.".format(args.video_id))
     elif append and not find and not replace_with:
@@ -168,12 +183,59 @@ def get_video_ids(key, channelId):
     return videoIDs
 
 
+def is_youtube_short(video_item):
+    """Return true if the video is a YouTube Short, false otherwise."""
+    if "contentDetails" in video_item and "duration" in video_item["contentDetails"]:
+        duration_str = video_item["contentDetails"]["duration"]
+
+        # Parse ISO 8601 duration string (e.g., "PT1M30S", "PT45S")
+        match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_str)
+        if match:
+            hours_str, minutes_str, seconds_str = match.groups()
+            hours = int(hours_str) if hours_str else 0
+            minutes = int(minutes_str) if minutes_str else 0
+            seconds = int(seconds_str) if seconds_str else 0
+
+            total_seconds = (hours * 3600) + (minutes * 60) + seconds
+
+            # YouTube Shorts are generally 180 seconds or less
+            return total_seconds <= 180
+    return False
+
+
+def uses_modern_description_format(video_item):
+    """
+    Checks if a video's published date is newer than January 7th, 2018.
+    """
+    TARGET_DATE_STR = "2018-01-07T00:00:00Z" # January 7th, 2018, 00:00:00 UTC
+    TARGET_DATE = datetime.fromisoformat(TARGET_DATE_STR.replace('Z', '+00:00'))
+
+    if "snippet" in video_item and "publishedAt" in video_item["snippet"]:
+        published_at_str = video_item["snippet"]["publishedAt"]
+
+        # Parse the publishedAt string into a datetime object.
+        # The 'Z' indicates UTC, so we should convert it to a timezone-aware datetime.
+        # Python 3.7+ fromisoformat handles 'Z' directly. For older versions,
+        # you might need to use .replace('Z', '+00:00') or a library like dateutil.
+        try:
+            published_date = datetime.fromisoformat(published_at_str.replace('Z', '+00:00'))
+        except ValueError:
+            # Handle cases where publishedAt might not be perfectly ISO 8601,
+            # though it usually is for YouTube API.
+            print(f"Warning: Could not parse publishedAt: {published_at_str}")
+            return True
+
+        # Compare the two datetime objects
+        return published_date > TARGET_DATE
+    return False
+
+
 def find_and_replace_single_video(youtube, options):
     """Perform find and replace on the description of a single YouTube video."""
     # Call the API's videos.list method to retrieve the video resource.
     videos_list_response = youtube.videos().list(
         id=options.video_id,
-        part='snippet'
+        part='snippet,contentDetails'
     ).execute()
 
     # If the response does not contain an array of "items" then the video was
@@ -183,7 +245,13 @@ def find_and_replace_single_video(youtube, options):
 
     # Since the request specified a video ID, the response only contains one
     # video resource. This code extracts the snippet from that resource.
-    videos_list_snippet = videos_list_response["items"][0]["snippet"]
+    video_from_list = videos_list_response["items"][0]
+    videos_list_snippet = video_from_list["snippet"]
+
+    if is_youtube_short(video_from_list):
+        raise IsYouTubeShortError()
+    if not uses_modern_description_format(video_from_list):
+        raise VideoTooOldError()
 
     with open(options.find) as file:
         find_string = file.read()

@@ -10,3 +10,4 @@ python3 update_description_v2.py --find ./inputs/old_address_4.txt --replace_wit
 3. Once finished, manually fix any descriptions that were missed for any reason. Note that the description of YouTube Shorts videos may be different than those of regular longform videos.
 4. Update the YouTube video default description here: https://studio.youtube.com/channel/UC0Il3poeADV0QEio9GWPEHw
     - from here, go to Settings > Upload Defaults
+5. Update "PO Box" location in shopify: https://admin.shopify.com/store/yawtcv-e3/settings/locations
